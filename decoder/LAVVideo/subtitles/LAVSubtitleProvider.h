@@ -62,7 +62,7 @@ private:
   void CloseDecoder();
 
   void ProcessSubtitleFrame(AVSubtitle *sub, REFERENCE_TIME rtStart, REFERENCE_TIME rtStop);
-  void ProcessSubtitleRect(AVSubtitleRect *rect, REFERENCE_TIME rtStart, REFERENCE_TIME rtStop);
+  void ProcessSubtitleRect(AVSubtitleRect *rect, REFERENCE_TIME rtStart, REFERENCE_TIME rtStop, REFERENCE_TIME rtTimeout);
   void AddSubtitleRect(CLAVSubRect *rect);
   CLAVSubRect* ProcessDVDHLI(CLAVSubRect *rect);
   void ClearSubtitleRects();

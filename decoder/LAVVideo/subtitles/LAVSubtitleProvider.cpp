@@ -119,6 +119,15 @@ STDMETHODIMP CLAVSubtitleProvider::RequestFrame(REFERENCE_TIME start, REFERENCE_
       if ((pRect->rtStart == AV_NOPTS_VALUE || pRect->rtStart <= mid)
         && (pRect->rtStop == AV_NOPTS_VALUE || pRect->rtStop > mid)
         && (m_bComposit || pRect->forced)) {
+        // Try to timeout subtitle without proper timing
+        if (pRect->rtStart == AV_NOPTS_VALUE) {
+          pRect->rtStart = start;
+
+          REFERENCE_TIME rtStopWithTimeout = start + pRect->rtTimeout;
+          if (pRect->rtStop == AV_NOPTS_VALUE || pRect->rtStop > rtStopWithTimeout) {
+            pRect->rtStop = rtStopWithTimeout;
+          }
+        }
 
         if (m_pHLI && PTS2RT(m_pHLI->StartPTM) <= mid && PTS2RT(m_pHLI->EndPTM) >= mid) {
           pRect = ProcessDVDHLI(pRect);
@@ -343,16 +352,16 @@ void CLAVSubtitleProvider::ProcessSubtitleFrame(AVSubtitle *sub, REFERENCE_TIME 
           for (unsigned j = 0; j < 4; j++)
             sub->rects[i]->pict.data[1][(j << 2) + 3] = sub->dvd_palette[k]->alpha[j] * 17;
 
-          ProcessSubtitleRect(sub->rects[i], rtStartRect, rtStopRect);
+          ProcessSubtitleRect(sub->rects[i], rtStartRect, rtStopRect, rtStopRect - rtStartRect);
         }
       } else {
-        ProcessSubtitleRect(sub->rects[i], rtStart, rtStop);
+        ProcessSubtitleRect(sub->rects[i], rtStart, rtStop, sub->end_display_time * 10000i64);
       }
     }
   }
 }
 
-void CLAVSubtitleProvider::ProcessSubtitleRect(AVSubtitleRect *rect, REFERENCE_TIME rtStart, REFERENCE_TIME rtStop)
+void CLAVSubtitleProvider::ProcessSubtitleRect(AVSubtitleRect *rect, REFERENCE_TIME rtStart, REFERENCE_TIME rtStop, REFERENCE_TIME rtTimeout)
 {
   DbgLog((LOG_TRACE, 10, L"Subtitle Rect, start: %I64d, stop: %I64d", rtStart, rtStop));
   // Skip zero-length subs
@@ -408,14 +417,15 @@ void CLAVSubtitleProvider::ProcessSubtitleRect(AVSubtitleRect *rect, REFERENCE_T
   SIZE size = { width, height };
   CLAVSubRect *lavRect = new CLAVSubRect();
   if (!lavRect) return;
-  lavRect->id       = m_SubPicId++;
-  lavRect->pitch    = rgbStride;
-  lavRect->pixels   = rgbSubStart;
-  lavRect->position = position;
-  lavRect->size     = size;
-  lavRect->rtStart  = rtStart;
-  lavRect->rtStop   = rtStop;
-  lavRect->forced   = rect->flags & AV_SUBTITLE_FLAG_FORCED;
+  lavRect->id        = m_SubPicId++;
+  lavRect->pitch     = rgbStride;
+  lavRect->pixels    = rgbSubStart;
+  lavRect->position  = position;
+  lavRect->size      = size;
+  lavRect->rtStart   = rtStart;
+  lavRect->rtStop    = rtStop;
+  lavRect->rtTimeout = rtTimeout;
+  lavRect->forced    = rect->flags & AV_SUBTITLE_FLAG_FORCED;
 
   if (m_pAVCtx->codec_id == AV_CODEC_ID_DVD_SUBTITLE) {
     lavRect->pixelsPal = CoTaskMemAlloc(lavRect->pitch * lavRect->size.cy);
